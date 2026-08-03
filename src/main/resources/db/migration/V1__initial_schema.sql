@@ -65,6 +65,7 @@ CREATE TABLE app_user (
     last_name       VARCHAR(50) NOT NULL,
     email           VARCHAR(120),
     phone           VARCHAR(30),
+    role            VARCHAR(20) NOT NULL,
     enabled         BOOLEAN NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
