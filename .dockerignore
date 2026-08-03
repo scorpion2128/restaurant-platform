@@ -1,0 +1,49 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.settings/
+.classpath
+.project
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Logs
+logs/
+*.log
+
+# Backup
+*.bak
+multitenant.bak/
+
+# Documentation
+*.md
+CLEANUP_SUMMARY.md
+NAMING_CONVENTIONS_UPDATE.md
+
+# Test
+src/test/
+
+# Others
+*.swp
+*.swo
+*~
+.cache

@@ -1,0 +1,23 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+*.bak
+
+# OS
+.DS_Store
+
+# Backup
+migrations-backup/
