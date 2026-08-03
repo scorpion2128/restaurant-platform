@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/restaurant_platform
-    username: postgres
-    password: wa..Z,X860@aaa2s[20S3__@_21872811
+    url: jdbc:postgresql://${PGHOST:localhost}:${PGPORT:5432}/${PGDATABASE:restaurant_platform}
+    username: ${PGUSER:postgres}
+    password: ${PGPASSWORD:wa..Z,X860@aaa2s[20S3__@_21872811}
     driver-class-name: org.postgresql.Driver
 
   jpa:
