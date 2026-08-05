@@ -37,7 +37,7 @@ public class MasterProductCategoryController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
     public ResponseEntity<ApiResponse<MasterCategoryResponse>> update(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @Valid @RequestBody UpdateMasterCategoryRequest request) {
         MasterCategoryResponse response = categoryService.update(id, request);
         return ResponseEntity.ok(ApiResponse.success("Master category updated successfully", response));
@@ -45,13 +45,13 @@ public class MasterProductCategoryController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable("id") Long id) {
         categoryService.delete(id);
         return ResponseEntity.ok(ApiResponse.success("Master category deleted successfully", null));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<MasterCategoryResponse>> findById(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<MasterCategoryResponse>> findById(@PathVariable("id") Long id) {
         MasterCategoryResponse response = categoryService.findById(id);
         return ResponseEntity.ok(ApiResponse.success("Master category retrieved successfully", response));
     }

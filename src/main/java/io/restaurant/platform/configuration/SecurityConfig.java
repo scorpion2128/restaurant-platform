@@ -54,8 +54,8 @@ public class SecurityConfig {
                         .authenticationEntryPoint(authenticationEntryPoint)
                 )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/public/**").permitAll()
+                        .requestMatchers("/auth/**").permitAll()
+                        .requestMatchers("/public/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().authenticated()
                 )

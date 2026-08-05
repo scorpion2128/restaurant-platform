@@ -4,9 +4,7 @@ import io.restaurant.platform.modules.product.dto.request.CreateMasterCategoryRe
 import io.restaurant.platform.modules.product.dto.request.UpdateMasterCategoryRequest;
 import io.restaurant.platform.modules.product.dto.response.MasterCategoryResponse;
 import io.restaurant.platform.modules.product.entity.MasterProductCategory;
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.MappingTarget;
+import org.mapstruct.*;
 
 @Mapper(componentModel = "spring")
 public interface MasterProductCategoryMapper {
@@ -18,5 +16,6 @@ public interface MasterProductCategoryMapper {
     MasterCategoryResponse toResponse(MasterProductCategory category);
 
     @Mapping(target = "organization", ignore = true)
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     void updateEntity(UpdateMasterCategoryRequest request, @MappingTarget MasterProductCategory category);
 }

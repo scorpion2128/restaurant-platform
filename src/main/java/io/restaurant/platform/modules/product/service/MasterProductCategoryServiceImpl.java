@@ -43,7 +43,7 @@ public class MasterProductCategoryServiceImpl implements MasterProductCategorySe
         Organization organization = getOrganization(organizationId);
 
         // Check if category with same name already exists
-        if (categoryRepository.existsByOrganizationIdAndName(organizationId, request.name())) {
+        if (categoryRepository.existsByOrganizationIdAndNameIgnoreCase(organizationId, request.name())) {
             throw new BusinessException(CATEGORY_NAME_EXISTS.formatted(request.name()));
         }
 

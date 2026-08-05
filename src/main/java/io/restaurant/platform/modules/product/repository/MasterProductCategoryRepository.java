@@ -16,5 +16,5 @@ public interface MasterProductCategoryRepository extends JpaRepository<MasterPro
     
     Optional<MasterProductCategory> findByOrganizationIdAndName(Long organizationId, String name);
     
-    boolean existsByOrganizationIdAndName(Long organizationId, String name);
+    boolean existsByOrganizationIdAndNameIgnoreCase(Long organizationId, String name);
 }
