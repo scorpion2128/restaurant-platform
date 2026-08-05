@@ -41,6 +41,10 @@ public class UserServiceImpl implements UserService {
 
     private static final String RESTAURANT_NOT_FOUND = "Restaurant with id %d not found.";
     private static final String USER_NOT_FOUND = "User with id %d not found.";
+    private static final String CANNOT_CHANGE_OWN_ROLE = "You cannot change your own role.";
+    private static final String CANNOT_CHANGE_OWN_ENABLED_STATUS = "You cannot change your own enabled status.";
+    private static final String INVALID_ROLE = "Invalid role: %s. Allowed values: ADMIN, WAITER, CASHIER, KITCHEN";
+    private static final String MAX_USERS_REACHED = "Maximum number of users (9999) reached for organization %d";
 
     private final SecurityContextHelper securityContextHelper;
     private final UserRepository userRepository;
@@ -108,12 +112,12 @@ public class UserServiceImpl implements UserService {
 
         // Non-admin users cannot change their own role
         if (!isAdmin && request.role() != null && request.role() != user.getRole()) {
-            throw new ForbiddenException("You cannot change your own role.");
+            throw new ForbiddenException(CANNOT_CHANGE_OWN_ROLE);
         }
 
         // Only admin users can change the enabled status
         if (!isAdmin && request.enabled() != null && request.enabled() != user.getEnabled()) {
-            throw new ForbiddenException("You cannot change your own enabled status.");
+            throw new ForbiddenException(CANNOT_CHANGE_OWN_ENABLED_STATUS);
         }
 
         userMapper.updateEntity(request, user);
@@ -154,7 +158,7 @@ public class UserServiceImpl implements UserService {
             try {
                 UserRole.valueOf(role.toUpperCase());
             } catch (IllegalArgumentException e) {
-                throw new BusinessException("Invalid role: " + role + ". Allowed values: ADMIN, WAITER, CASHIER, KITCHEN");
+                throw new BusinessException(INVALID_ROLE.formatted(role));
             }
             UserRole userRole = UserRole.valueOf(role.toUpperCase());
             accessList = userRestaurantAccessRepository.findByRestaurantId(restaurantId).stream()
@@ -171,7 +175,6 @@ public class UserServiceImpl implements UserService {
             .collect(Collectors.toList());
 
         // For now, return all results without pagination (simplified)
-        // TODO: Implement proper pagination
         List<UserResponse> userResponses = users.stream()
             .map(userMapper::toResponse)
             .collect(Collectors.toList());
@@ -231,7 +234,7 @@ public class UserServiceImpl implements UserService {
         long nextNumber = count + 1;
 
         if (nextNumber > 9999) {
-            throw new BusinessException("Maximum number of users (9999) reached for organization " + organizationId);
+            throw new BusinessException(MAX_USERS_REACHED.formatted(organizationId));
         }
 
         String correlative = String.format("%04d", nextNumber);

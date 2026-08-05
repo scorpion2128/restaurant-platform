@@ -39,6 +39,7 @@ public class MasterMenuTemplateServiceImpl implements MasterMenuTemplateService 
     private static final String ORGANIZATION_NOT_FOUND = "Organization with id %d not found.";
     private static final String PRODUCT_NOT_FOUND = "Master product with id %d not found.";
     private static final String TEMPLATE_NAME_EXISTS = "Master template with name '%s' already exists.";
+    private static final String ITEM_TEMPLATE_MISMATCH = "Item does not belong to this template.";
 
     private final SecurityContextHelper securityContextHelper;
     private final MasterMenuTemplateRepository templateRepository;
@@ -153,7 +154,7 @@ public class MasterMenuTemplateServiceImpl implements MasterMenuTemplateService 
         
         // Verify item belongs to template
         if (!item.getMasterTemplate().getId().equals(templateId)) {
-            throw new BusinessException("Item does not belong to this template");
+            throw new BusinessException(ITEM_TEMPLATE_MISMATCH);
         }
 
         itemRepository.delete(item);

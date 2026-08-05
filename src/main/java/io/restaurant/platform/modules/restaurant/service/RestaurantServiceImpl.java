@@ -28,6 +28,10 @@ public class RestaurantServiceImpl implements RestaurantService {
 
     private static final String RESTAURANT_NOT_FOUND = "Restaurant with id %d not found.";
     private static final String USER_NOT_FOUND = "User with id %d not found.";
+    private static final String USER_ORGANIZATION_MISMATCH = "User does not belong to the same organization as the restaurant.";
+    private static final String USER_ALREADY_HAS_ACCESS = "User already has access to this restaurant.";
+    private static final String USER_ACCESS_NOT_FOUND = "User access not found for this restaurant.";
+    private static final String CANNOT_REMOVE_LAST_ACCESS = "Cannot remove user's last restaurant access.";
 
     private final RestaurantRepository repository;
     private final RestaurantMapper mapper;
@@ -94,14 +98,14 @@ public class RestaurantServiceImpl implements RestaurantService {
         
         // Verify user belongs to the same organization
         if (!user.getOrganization().getId().equals(restaurant.getOrganization().getId())) {
-            throw new BusinessException("User does not belong to the same organization as the restaurant");
+            throw new BusinessException(USER_ORGANIZATION_MISMATCH);
         }
         
         // Check if user already has access
         boolean hasAccess = userRestaurantAccessRepository
                 .existsByUserIdAndRestaurantId(user.getId(), restaurant.getId());
         if (hasAccess) {
-            throw new BusinessException("User already has access to this restaurant");
+            throw new BusinessException(USER_ALREADY_HAS_ACCESS);
         }
         
         // Create access
@@ -127,12 +131,12 @@ public class RestaurantServiceImpl implements RestaurantService {
     public void removeUser(Long restaurantId, Long userId) {
         UserRestaurantAccess access = userRestaurantAccessRepository
                 .findByUserIdAndRestaurantId(userId, restaurantId)
-                .orElseThrow(() -> new ResourceNotFoundException("User access not found for this restaurant"));
+                .orElseThrow(() -> new ResourceNotFoundException(USER_ACCESS_NOT_FOUND));
         
         // Verify user has at least one other restaurant
         long accessCount = userRestaurantAccessRepository.countByUserId(userId);
         if (accessCount <= 1) {
-            throw new BusinessException("Cannot remove user's last restaurant access");
+            throw new BusinessException(CANNOT_REMOVE_LAST_ACCESS);
         }
         
         userRestaurantAccessRepository.delete(access);

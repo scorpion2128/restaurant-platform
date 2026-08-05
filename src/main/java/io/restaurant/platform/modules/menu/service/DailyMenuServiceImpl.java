@@ -49,6 +49,8 @@ public class DailyMenuServiceImpl implements DailyMenuService {
     private static final String TEMPLATE_NOT_FOUND = "Menu template with id %d not found.";
     private static final String MENU_DATE_EXISTS = "Daily menu for date %s already exists.";
     private static final String NO_ACTIVE_MENU = "No active menu found.";
+    private static final String PRODUCTS_NOT_FOUND = "One or more products not found. Missing product IDs: %s.";
+    private static final String UNKNOWN_PRODUCT = "Unknown Product";
 
     private final DailyMenuRepository dailyMenuRepository;
     private final DailyMenuItemRepository itemRepository;
@@ -83,7 +85,7 @@ public class DailyMenuServiceImpl implements DailyMenuService {
             List<Long> missingIds = productIds.stream()
                     .filter(productId -> !foundIds.contains(productId))
                     .toList();
-            throw new BusinessException("One or more products not found. Missing product IDs: " + missingIds);
+            throw new BusinessException(PRODUCTS_NOT_FOUND.formatted(missingIds));
         }
 
         // Create daily menu
@@ -145,7 +147,7 @@ public class DailyMenuServiceImpl implements DailyMenuService {
             List<Long> missingIds = productIds.stream()
                     .filter(productId -> !foundIds.contains(productId))
                     .toList();
-            throw new BusinessException("One or more products not found. Missing product IDs: " + missingIds);
+            throw new BusinessException(PRODUCTS_NOT_FOUND.formatted(missingIds));
         }
 
         // Update daily menu
@@ -260,7 +262,7 @@ public class DailyMenuServiceImpl implements DailyMenuService {
                     
                     // Get product name from master_product
                     String productName = product.getMasterProduct() != null ? 
-                            product.getMasterProduct().getName() : "Unknown Product";
+                            product.getMasterProduct().getName() : UNKNOWN_PRODUCT;
                     
                     return new MenuItemResponse(
                             item.getId(),

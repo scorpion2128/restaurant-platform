@@ -24,6 +24,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
+    private static final String USER_WITHOUT_RESTAURANT_ACCESS = "User has no restaurant access assigned.";
+    private static final String RESTAURANT_ACCESS_NOT_FOUND = "User does not have access to restaurant ID: %d.";
+
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
     private final UserRestaurantAccessRepository userRestaurantAccessRepository;
@@ -42,7 +45,7 @@ public class AuthServiceImpl implements AuthService {
         List<UserRestaurantAccess> access = userRestaurantAccessRepository.findByUserId(user.getId());
         
         if (access.isEmpty()) {
-            throw new ResourceNotFoundException("User has no restaurant access assigned");
+            throw new ResourceNotFoundException(USER_WITHOUT_RESTAURANT_ACCESS);
         }
         
         // Convert to DTOs
@@ -94,7 +97,7 @@ public class AuthServiceImpl implements AuthService {
         // Verify user has access to this restaurant
         UserRestaurantAccess access = userRestaurantAccessRepository
                 .findByUserIdAndRestaurantId(user.getId(), request.restaurantId())
-                .orElseThrow(() -> new ResourceNotFoundException("User does not have access to restaurant ID: " + request.restaurantId()));
+                .orElseThrow(() -> new ResourceNotFoundException(RESTAURANT_ACCESS_NOT_FOUND.formatted(request.restaurantId())));
         
         // Get all restaurant access
         List<UserRestaurantAccess> allAccess = userRestaurantAccessRepository.findByUserId(user.getId());

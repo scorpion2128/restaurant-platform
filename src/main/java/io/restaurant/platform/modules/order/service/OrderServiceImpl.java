@@ -29,7 +29,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -37,6 +36,13 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
+
+    private static final String RESTAURANT_NOT_FOUND = "Restaurant not found with id: %d";
+    private static final String WAITER_NOT_FOUND = "Waiter not found with id: %d";
+    private static final String TABLE_NUMBER_NOT_FOUND = "Table not found with number: %d";
+    private static final String TABLE_ID_NOT_FOUND = "Table not found with id: %d";
+    private static final String PRODUCT_NOT_FOUND = "Product not found with id: %d";
+    private static final String ORDER_NOT_FOUND = "Order not found with id: %d";
 
     private final OrderRepository orderRepository;
     private final RestaurantRepository restaurantRepository;
@@ -51,23 +57,23 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponse createOrder(CreateOrderRequest request, Long restaurantId, Long waiterId) {
         // Validate restaurant
         Restaurant restaurant = restaurantRepository.findById(restaurantId)
-                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found with id: " + restaurantId));
+                .orElseThrow(() -> new ResourceNotFoundException(RESTAURANT_NOT_FOUND.formatted(restaurantId)));
 
         // Validate waiter
         User waiter = userRepository.findById(waiterId)
-                .orElseThrow(() -> new ResourceNotFoundException("Waiter not found with id: " + waiterId));
+                .orElseThrow(() -> new ResourceNotFoundException(WAITER_NOT_FOUND.formatted(waiterId)));
 
         // Find table if tableNumber was provided
         Long tableId = null;
         RestaurantTable table = null;
         if (request.tableNumber() != null) {
             table = restaurantTableRepository.findByRestaurantIdAndNumber(restaurantId, request.tableNumber())
-                    .orElseThrow(() -> new ResourceNotFoundException("Table not found with number: " + request.tableNumber()));
+                    .orElseThrow(() -> new ResourceNotFoundException(TABLE_NUMBER_NOT_FOUND.formatted(request.tableNumber())));
             tableId = table.getId();
         } else if (request.tableId() != null) {
             // If tableId was provided directly, validate it exists
             table = restaurantTableRepository.findById(request.tableId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Table not found with id: " + request.tableId()));
+                    .orElseThrow(() -> new ResourceNotFoundException(TABLE_ID_NOT_FOUND.formatted(request.tableId())));
             tableId = table.getId();
         }
 
@@ -99,7 +105,7 @@ public class OrderServiceImpl implements OrderService {
 
         for (OrderItemRequest itemReq : request.items()) {
             Product product = productRepository.findById(itemReq.productId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + itemReq.productId()));
+                    .orElseThrow(() -> new ResourceNotFoundException(PRODUCT_NOT_FOUND.formatted(itemReq.productId())));
 
             OrderItem item = new OrderItem();
             item.setOrder(order);
@@ -145,7 +151,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(readOnly = true)
     public OrderResponse findById(Long id, Long restaurantId) {
         Order order = orderRepository.findByIdAndRestaurantId(id, restaurantId)
-                .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ORDER_NOT_FOUND.formatted(id)));
 
         return buildOrderResponse(order);
     }
@@ -188,7 +194,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public OrderResponse updateStatus(Long id, UpdateOrderStatusRequest request, Long restaurantId) {
         Order order = orderRepository.findByIdAndRestaurantId(id, restaurantId)
-                .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ORDER_NOT_FOUND.formatted(id)));
 
         order.setStatus(request.status());
         Order updatedOrder = orderRepository.save(order);

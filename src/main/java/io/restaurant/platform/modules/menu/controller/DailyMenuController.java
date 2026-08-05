@@ -29,12 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 
-/**
- * REST controller for managing daily menus.
- * Only ADMIN users can create, update, or delete daily menus.
- */
 @RestController
-@RequestMapping("/api/daily-menus")
+@RequestMapping("/daily-menus")
 @RequiredArgsConstructor
 public class DailyMenuController {
 

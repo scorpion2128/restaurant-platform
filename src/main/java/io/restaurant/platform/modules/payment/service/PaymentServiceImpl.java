@@ -1,5 +1,6 @@
 package io.restaurant.platform.modules.payment.service;
 
+import io.restaurant.platform.modules.order.dto.response.OrderItemResponse;
 import io.restaurant.platform.modules.order.entity.Order;
 import io.restaurant.platform.modules.order.enums.OrderStatus;
 import io.restaurant.platform.modules.order.repository.OrderRepository;
@@ -9,7 +10,6 @@ import io.restaurant.platform.modules.payment.dto.response.*;
 import io.restaurant.platform.modules.payment.entity.Payment;
 import io.restaurant.platform.modules.payment.entity.PaymentMethodDetail;
 import io.restaurant.platform.modules.payment.entity.PaymentOrder;
-import io.restaurant.platform.modules.payment.enums.PaymentMethod;
 import io.restaurant.platform.modules.payment.repository.PaymentRepository;
 import io.restaurant.platform.modules.restaurant.entity.Restaurant;
 import io.restaurant.platform.modules.restaurant.repository.RestaurantRepository;
@@ -37,8 +37,18 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class PaymentServiceImpl implements PaymentService {
 
-    private static final BigDecimal IGV_RATE = new BigDecimal("0.18");
     private static final BigDecimal ONE_PLUS_IGV = new BigDecimal("1.18");
+    private static final String TABLE_NOT_FOUND_WITH_ID = "Table not found with id: %d";
+    private static final String NO_DELIVERED_ORDERS_FOUND = "No delivered orders found for table: %d";
+    private static final String SOME_ORDERS_NOT_FOUND = "Some orders not found.";
+    private static final String ALL_ORDERS_MUST_BE_DELIVERED = "All orders must be in DELIVERED status.";
+    private static final String ALL_ORDERS_MUST_BELONG_TO_SAME_TABLE = "All orders must belong to the same table.";
+    private static final String PAYMENT_SUM_MISMATCH = "Payment sum (%.2f) does not match total (%.2f)";
+    private static final String RESTAURANT_NOT_FOUND = "Restaurant not found.";
+    private static final String TABLE_NOT_FOUND = "Table not found.";
+    private static final String USER_NOT_FOUND = "User not found.";
+    private static final String PAYMENT_NOT_FOUND = "Payment not found with id: %d";
+    private static final String UNKNOWN_PRODUCT = "Unknown Product";
 
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
@@ -50,10 +60,10 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional(readOnly = true)
     public TableAccountResponse getTableAccount(Long tableId, Long restaurantId) {
         RestaurantTable table = tableRepository.findById(tableId)
-                .orElseThrow(() -> new ResourceNotFoundException("Table not found with id: " + tableId));
+                .orElseThrow(() -> new ResourceNotFoundException(TABLE_NOT_FOUND_WITH_ID.formatted(tableId)));
         
         if (!table.getRestaurant().getId().equals(restaurantId)) {
-            throw new ResourceNotFoundException("Table not found with id: " + tableId);
+            throw new ResourceNotFoundException(TABLE_NOT_FOUND_WITH_ID.formatted(tableId));
         }
 
         // Get DELIVERED orders from the table
@@ -62,7 +72,7 @@ public class PaymentServiceImpl implements PaymentService {
         );
 
         if (orders.isEmpty()) {
-            throw new ResourceNotFoundException("No delivered orders found for table: " + table.getNumber());
+            throw new ResourceNotFoundException(NO_DELIVERED_ORDERS_FOUND.formatted(table.getNumber()));
         }
 
         // Calculate total
@@ -101,14 +111,14 @@ public class PaymentServiceImpl implements PaymentService {
         // Validate that orders exist and are DELIVERED
         List<Order> orders = orderRepository.findAllById(request.orderIds());
         if (orders.size() != request.orderIds().size()) {
-            throw new ResourceNotFoundException("Some orders not found");
+            throw new ResourceNotFoundException(SOME_ORDERS_NOT_FOUND);
         }
 
         // Validate that all orders are DELIVERED
         boolean allDelivered = orders.stream()
                 .allMatch(order -> order.getStatus() == OrderStatus.DELIVERED);
         if (!allDelivered) {
-            throw new IllegalStateException("All orders must be in DELIVERED status");
+            throw new IllegalStateException(ALL_ORDERS_MUST_BE_DELIVERED);
         }
 
         // Validate that all belong to the same table
@@ -116,7 +126,7 @@ public class PaymentServiceImpl implements PaymentService {
         boolean sameTable = orders.stream()
                 .allMatch(order -> order.getTableId().equals(tableId));
         if (!sameTable) {
-            throw new IllegalStateException("All orders must belong to the same table");
+            throw new IllegalStateException(ALL_ORDERS_MUST_BELONG_TO_SAME_TABLE);
         }
 
         // Calculate total
@@ -131,20 +141,19 @@ public class PaymentServiceImpl implements PaymentService {
 
         if (paymentSum.compareTo(totalWithIgv) != 0) {
             throw new IllegalStateException(
-                    String.format("Payment sum (%.2f) does not match total (%.2f)",
-                            paymentSum, totalWithIgv)
+                    PAYMENT_SUM_MISMATCH.formatted(paymentSum, totalWithIgv)
             );
         }
 
         // Get entities
         Restaurant restaurant = restaurantRepository.findById(restaurantId)
-                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found"));
+                .orElseThrow(() -> new ResourceNotFoundException(RESTAURANT_NOT_FOUND));
 
         RestaurantTable table = tableRepository.findById(tableId)
-                .orElseThrow(() -> new ResourceNotFoundException("Table not found"));
+                .orElseThrow(() -> new ResourceNotFoundException(TABLE_NOT_FOUND));
 
         User paidBy = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException(USER_NOT_FOUND));
 
         User waiter = orders.get(0).getWaiter();
 
@@ -202,10 +211,10 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional(readOnly = true)
     public PaymentReceiptResponse getPaymentReceipt(Long paymentId, Long restaurantId) {
         Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
+                .orElseThrow(() -> new ResourceNotFoundException(PAYMENT_NOT_FOUND.formatted(paymentId)));
         
         if (!payment.getRestaurant().getId().equals(restaurantId)) {
-            throw new ResourceNotFoundException("Payment not found with id: " + paymentId);
+            throw new ResourceNotFoundException(PAYMENT_NOT_FOUND.formatted(paymentId));
         }
 
         List<Order> orders = payment.getPaymentOrders().stream()
@@ -228,10 +237,10 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional(readOnly = true)
     public PaymentResponse getPaymentById(Long paymentId, Long restaurantId) {
         Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
+                .orElseThrow(() -> new ResourceNotFoundException(PAYMENT_NOT_FOUND.formatted(paymentId)));
         
         if (!payment.getRestaurant().getId().equals(restaurantId)) {
-            throw new ResourceNotFoundException("Payment not found with id: " + paymentId);
+            throw new ResourceNotFoundException(PAYMENT_NOT_FOUND.formatted(paymentId));
         }
         
         return mapToPaymentResponse(payment);
@@ -261,7 +270,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         if (activeOrdersCount == 0) {
             RestaurantTable table = tableRepository.findById(tableId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Table not found"));
+                    .orElseThrow(() -> new ResourceNotFoundException(TABLE_NOT_FOUND));
             
             if (table.getRestaurant().getId().equals(restaurantId)) {
                 table.setStatus(TableStatus.AVAILABLE);
@@ -331,11 +340,11 @@ public class PaymentServiceImpl implements PaymentService {
                 order.getOrderNumber(),
                 order.getCreatedAt(),
                 order.getItems().stream()
-                        .map(item -> new io.restaurant.platform.modules.order.dto.response.OrderItemResponse(
+                        .map(item -> new OrderItemResponse(
                                 item.getId(),
                                 item.getProduct().getId(),
                                 item.getProduct().getMasterProduct() != null ? 
-                                    item.getProduct().getMasterProduct().getName() : "Unknown Product",
+                                    item.getProduct().getMasterProduct().getName() : UNKNOWN_PRODUCT,
                                 item.getQuantity(),
                                 item.getUnitPrice(),
                                 item.getSubtotal(),

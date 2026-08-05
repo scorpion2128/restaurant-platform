@@ -17,11 +17,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * REST controller for managing master product categories (shared catalog)
- */
 @RestController
-@RequestMapping("/api/master-product-categories")
+@RequestMapping("/master-product-categories")
 @RequiredArgsConstructor
 public class MasterProductCategoryController {
 

@@ -30,6 +30,7 @@ public class RestaurantTableServiceImpl implements RestaurantTableService {
 
     private static final String TABLE_NOT_FOUND = "Table not found";
     private static final String TABLE_NUMBER_EXISTS = "Table number already exists in this restaurant";
+    private static final String RESTAURANT_NOT_FOUND = "Restaurant not found";
 
     @Override
     @Transactional
@@ -41,7 +42,7 @@ public class RestaurantTableServiceImpl implements RestaurantTableService {
         }
 
         Restaurant restaurant = restaurantRepository.findById(restaurantId)
-                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found"));
+                .orElseThrow(() -> new ResourceNotFoundException(RESTAURANT_NOT_FOUND));
 
         RestaurantTable table = new RestaurantTable();
         table.setRestaurant(restaurant);
@@ -107,9 +108,7 @@ public class RestaurantTableServiceImpl implements RestaurantTableService {
     @Transactional(readOnly = true)
     public List<RestaurantTableResponse> findAllByRestaurant() {
         Long restaurantId = getCurrentRestaurantId();
-        System.out.println("DEBUG - Buscando mesas para restaurantId: " + restaurantId);
         List<RestaurantTable> tables = tableRepository.findByRestaurantIdOrderByNumberAsc(restaurantId);
-        System.out.println("DEBUG - Se encontraron " + tables.size() + " mesas");
         return tables.stream()
                 .map(tableMapper::toResponse)
                 .collect(Collectors.toList());

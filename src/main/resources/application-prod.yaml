@@ -11,6 +11,10 @@ spring:
       idle-timeout: 600000
       max-lifetime: 1800000
 
+  mvc:
+    servlet:
+      path: /api
+
   jpa:
     hibernate:
       ddl-auto: validate
