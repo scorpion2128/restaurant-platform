@@ -36,8 +36,11 @@ public interface MasterMenuTemplateMapper {
                         item.getId(),
                         item.getMasterProduct() != null ? item.getMasterProduct().getId() : null,
                         item.getMasterProduct() != null ? item.getMasterProduct().getName() : "Unknown",
+                        item.getMasterProduct() != null ? item.getMasterProduct().getBasePrice() : null,
                         item.getMasterProduct() != null && item.getMasterProduct().getMasterCategory() != null ? 
                             item.getMasterProduct().getMasterCategory().getName() : null,
+                        item.getSection() != null ? item.getSection().getId() : null,
+                        item.getSection() != null ? item.getSection().getName() : null,
                         item.getDisplayOrder()
                 ))
                 .collect(Collectors.toList());

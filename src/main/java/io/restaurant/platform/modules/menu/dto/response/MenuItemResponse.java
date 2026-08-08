@@ -14,11 +14,7 @@ public record MenuItemResponse(
 
         Long sectionId,
 
-        String sectionName,
-
-        BigDecimal priceOverride,
-
-        BigDecimal effectivePrice
+        String sectionName
 
 ) {
 }

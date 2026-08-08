@@ -3,13 +3,18 @@ package io.restaurant.platform.modules.product.dto.response;
 import java.math.BigDecimal;
 
 /**
- * Product Response - Working directly with master_product
+ * Master Product Response
+ * Represents a product in the centralized catalog
  */
-public record ProductResponse(
+public record MasterProductResponse(
 
         Long id,
 
         Long organizationId,
+
+        Long categoryId,
+
+        String categoryName,
 
         String code,
 
@@ -17,13 +22,9 @@ public record ProductResponse(
 
         String description,
 
-        BigDecimal price,
+        BigDecimal basePrice,
 
-        Boolean active,
-
-        Long categoryId,
-
-        String categoryName
+        Boolean active
 
 ) {
 }

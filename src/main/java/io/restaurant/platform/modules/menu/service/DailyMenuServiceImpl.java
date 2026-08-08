@@ -1,18 +1,17 @@
 package io.restaurant.platform.modules.menu.service;
 
 import io.restaurant.platform.auth.security.SecurityContextHelper;
-import io.restaurant.platform.modules.menu.dto.request.CreateDailyMenuRequest;
-import io.restaurant.platform.modules.menu.dto.request.MenuItemRequest;
-import io.restaurant.platform.modules.menu.dto.request.UpdateDailyMenuRequest;
+import io.restaurant.platform.modules.menu.dto.request.CreateDailyMenuOverrideRequest;
 import io.restaurant.platform.modules.menu.dto.response.DailyMenuResponse;
 import io.restaurant.platform.modules.menu.dto.response.MenuItemResponse;
 import io.restaurant.platform.modules.menu.entity.DailyMenu;
-import io.restaurant.platform.modules.menu.entity.DailyMenuItem;
 import io.restaurant.platform.modules.menu.entity.MasterMenuTemplate;
-import io.restaurant.platform.modules.menu.mapper.DailyMenuMapper;
-import io.restaurant.platform.modules.menu.repository.DailyMenuItemRepository;
+import io.restaurant.platform.modules.menu.entity.MasterMenuTemplateItem;
+import io.restaurant.platform.modules.menu.entity.RecurringMenuConfig;
 import io.restaurant.platform.modules.menu.repository.DailyMenuRepository;
 import io.restaurant.platform.modules.menu.repository.MasterMenuTemplateRepository;
+import io.restaurant.platform.modules.menu.repository.RecurringMenuConfigRepository;
+import io.restaurant.platform.modules.product.entity.MasterProduct;
 import io.restaurant.platform.modules.product.entity.Product;
 import io.restaurant.platform.modules.product.repository.ProductRepository;
 import io.restaurant.platform.modules.restaurant.entity.Restaurant;
@@ -20,282 +19,250 @@ import io.restaurant.platform.modules.restaurant.repository.RestaurantRepository
 import io.restaurant.platform.shared.exception.BusinessException;
 import io.restaurant.platform.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Optional;
 
 /**
- * Daily Menu Service Implementation
- * Uses master catalog (master_menu_template) for templates
- * Products link to master_product for name/description
+ * Daily Menu Service Implementation - New approach with recurring menus and overrides
+ * - Recurring menus: Automatic configuration for each day of week
+ * - Overrides: Specific date configurations that take priority
  */
+@Slf4j
 @Service
 @Transactional
 @RequiredArgsConstructor
 public class DailyMenuServiceImpl implements DailyMenuService {
 
     private final SecurityContextHelper securityContextHelper;
-
-    private static final String DAILY_MENU_NOT_FOUND = "Daily menu with id %d not found.";
-    private static final String DAILY_MENU_DATE_NOT_FOUND = "Daily menu for date %s not found.";
-    private static final String RESTAURANT_NOT_FOUND = "Restaurant with id %d not found.";
-    private static final String PRODUCT_NOT_FOUND = "Product with id %d not found.";
-    private static final String TEMPLATE_NOT_FOUND = "Menu template with id %d not found.";
-    private static final String MENU_DATE_EXISTS = "Daily menu for date %s already exists.";
-    private static final String NO_ACTIVE_MENU = "No active menu found.";
-    private static final String PRODUCTS_NOT_FOUND = "One or more products not found. Missing product IDs: %s.";
-    private static final String UNKNOWN_PRODUCT = "Unknown Product";
-
     private final DailyMenuRepository dailyMenuRepository;
-    private final DailyMenuItemRepository itemRepository;
+    private final RecurringMenuConfigRepository recurringMenuConfigRepository;
+    private final MasterMenuTemplateRepository masterTemplateRepository;
     private final ProductRepository productRepository;
     private final RestaurantRepository restaurantRepository;
-    private final MasterMenuTemplateRepository masterTemplateRepository;
-    private final DailyMenuMapper dailyMenuMapper;
 
+    private static final String DAILY_MENU_NOT_FOUND = "Daily menu with id %d not found.";
+    private static final String DAILY_MENU_DATE_NOT_FOUND = "No menu configured for date %s.";
+    private static final String RESTAURANT_NOT_FOUND = "Restaurant with id %d not found.";
+    private static final String TEMPLATE_NOT_FOUND = "Menu template with id %d not found.";
+    private static final String MENU_DATE_EXISTS = "Daily menu override for date %s already exists.";
     @Override
-    public DailyMenuResponse create(CreateDailyMenuRequest request) {
+    public DailyMenuResponse createOverride(CreateDailyMenuOverrideRequest request) {
         Long restaurantId = getCurrentRestaurantId();
         Restaurant restaurant = getRestaurant(restaurantId);
 
-        // Check if daily menu for this date already exists
+        // Check if override already exists for this date
         if (dailyMenuRepository.existsByRestaurantIdAndMenuDate(restaurantId, request.menuDate())) {
             throw new BusinessException(MENU_DATE_EXISTS.formatted(request.menuDate()));
         }
 
-        // Validate template if provided
-        MasterMenuTemplate template = null;
-        if (request.templateId() != null) {
-            template = getMasterTemplate(request.templateId());
-        }
+        MasterMenuTemplate template = getMasterTemplate(request.templateId());
 
-        // Validate all products exist
-        List<Long> productIds = request.items().stream()
-                .map(MenuItemRequest::productId)
-                .toList();
-        List<Product> products = productRepository.findByIdIn(productIds);
-        if (products.size() != productIds.size()) {
-            List<Long> foundIds = products.stream().map(Product::getId).toList();
-            List<Long> missingIds = productIds.stream()
-                    .filter(productId -> !foundIds.contains(productId))
-                    .toList();
-            throw new BusinessException(PRODUCTS_NOT_FOUND.formatted(missingIds));
-        }
-
-        // Create daily menu
-        DailyMenu dailyMenu = dailyMenuMapper.toEntity(request);
+        // Create daily menu as override
+        DailyMenu dailyMenu = new DailyMenu();
         dailyMenu.setRestaurant(restaurant);
+        dailyMenu.setMenuDate(request.menuDate());
         dailyMenu.setMasterTemplate(template);
-        if (request.active() == null) {
-            dailyMenu.setActive(false);
-        }
-        
-        // If activating this menu, deactivate any other active menu
-        if (dailyMenu.getActive()) {
-            deactivateAllMenus(restaurantId);
-        }
-        
+        dailyMenu.setIsOverride(true);
         dailyMenu = dailyMenuRepository.save(dailyMenu);
 
-        // Create items
-        DailyMenu finalDailyMenu = dailyMenu;
-        List<DailyMenuItem> items = request.items().stream()
-                .map(itemReq -> {
-                    Product product = products.stream()
-                            .filter(p -> p.getId().equals(itemReq.productId()))
-                            .findFirst()
-                            .orElseThrow(() -> new ResourceNotFoundException(PRODUCT_NOT_FOUND.formatted(itemReq.productId())));
-                    
-                    DailyMenuItem item = new DailyMenuItem();
-                    item.setDailyMenu(finalDailyMenu);
-                    item.setProduct(product);
-                    item.setPriceOverride(itemReq.priceOverride());
-                    
-                    return item;
-                })
-                .toList();
-
-        itemRepository.saveAll(items);
-
-        return buildDailyMenuResponse(dailyMenu, items);
+        log.info("Created override menu for date {} with template {}", request.menuDate(), template.getId());
+        return buildDailyMenuResponse(dailyMenu);
     }
 
     @Override
-    public DailyMenuResponse update(Long id, UpdateDailyMenuRequest request) {
-        DailyMenu dailyMenu = getDailyMenu(id);
+    public DailyMenuResponse updateOverride(Long id, CreateDailyMenuOverrideRequest request) {
         Long restaurantId = getCurrentRestaurantId();
+        DailyMenu dailyMenu = getDailyMenu(id, restaurantId);
 
-        // Validate template if provided
-        MasterMenuTemplate template = null;
-        if (request.templateId() != null) {
-            template = getMasterTemplate(request.templateId());
+        if (!dailyMenu.getIsOverride()) {
+            throw new BusinessException("Cannot update non-override menu. ID: " + id);
         }
 
-        // Validate all products exist
-        List<Long> productIds = request.items().stream()
-                .map(MenuItemRequest::productId)
-                .toList();
-        List<Product> products = productRepository.findByIdIn(productIds);
-        if (products.size() != productIds.size()) {
-            List<Long> foundIds = products.stream().map(Product::getId).toList();
-            List<Long> missingIds = productIds.stream()
-                    .filter(productId -> !foundIds.contains(productId))
-                    .toList();
-            throw new BusinessException(PRODUCTS_NOT_FOUND.formatted(missingIds));
-        }
+        dailyMenuRepository.findByRestaurantIdAndMenuDate(restaurantId, request.menuDate())
+                .filter(existing -> !existing.getId().equals(id))
+                .ifPresent(existing -> {
+                    throw new BusinessException(MENU_DATE_EXISTS.formatted(request.menuDate()));
+                });
 
-        // Update daily menu
-        dailyMenu.setMasterTemplate(template);
-        if (request.active() != null) {
-            // If activating this menu, deactivate any other active menu
-            if (request.active() && !dailyMenu.getActive()) {
-                deactivateAllMenus(restaurantId);
-            }
-            dailyMenu.setActive(request.active());
-        }
+        dailyMenu.setMenuDate(request.menuDate());
+        dailyMenu.setMasterTemplate(getMasterTemplate(request.templateId()));
 
-        // Replace items
-        itemRepository.deleteByDailyMenuId(id);
-        List<DailyMenuItem> newItems = request.items().stream()
-                .map(itemReq -> {
-                    Product product = products.stream()
-                            .filter(p -> p.getId().equals(itemReq.productId()))
-                            .findFirst()
-                            .orElseThrow(() -> new ResourceNotFoundException(PRODUCT_NOT_FOUND.formatted(itemReq.productId())));
-                    
-                    DailyMenuItem item = new DailyMenuItem();
-                    item.setDailyMenu(dailyMenu);
-                    item.setProduct(product);
-                    item.setPriceOverride(itemReq.priceOverride());
-                    
-                    return item;
-                })
-                .toList();
-
-        itemRepository.saveAll(newItems);
-
-        return buildDailyMenuResponse(dailyMenu, newItems);
+        log.info("Updated override menu {} for date {} with template {}",
+                id, request.menuDate(), request.templateId());
+        return buildDailyMenuResponse(dailyMenu);
     }
 
     @Override
-    public void delete(Long id) {
-        DailyMenu dailyMenu = getDailyMenu(id);
-        itemRepository.deleteByDailyMenuId(id);
+    public void deleteOverride(Long id) {
+        DailyMenu dailyMenu = getDailyMenu(id, getCurrentRestaurantId());
+        
+        if (!dailyMenu.getIsOverride()) {
+            throw new BusinessException("Cannot delete non-override menu. ID: " + id);
+        }
+
         dailyMenuRepository.delete(dailyMenu);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public DailyMenuResponse findById(Long id) {
-        DailyMenu dailyMenu = getDailyMenu(id);
-        List<DailyMenuItem> items = itemRepository.findByDailyMenuId(id);
-        return buildDailyMenuResponse(dailyMenu, items);
+        log.info("Deleted override menu for date {}", dailyMenu.getMenuDate());
     }
 
     @Override
     @Transactional(readOnly = true)
     public DailyMenuResponse findByDate(LocalDate date) {
         Long restaurantId = getCurrentRestaurantId();
-        DailyMenu dailyMenu = dailyMenuRepository.findByRestaurantIdAndMenuDate(restaurantId, date)
-                .orElseThrow(() -> new ResourceNotFoundException(DAILY_MENU_DATE_NOT_FOUND.formatted(date)));
-        
-        List<DailyMenuItem> items = itemRepository.findByDailyMenuId(dailyMenu.getId());
-        return buildDailyMenuResponse(dailyMenu, items);
-    }
 
-    @Override
-    @Transactional(readOnly = true)
-    public Page<DailyMenuResponse> findAllByRestaurant(Pageable pageable) {
-        Long restaurantId = getCurrentRestaurantId();
-        Page<DailyMenu> dailyMenus = dailyMenuRepository.findByRestaurantId(restaurantId, pageable);
-        
-        return dailyMenus.map(dailyMenu -> {
-            List<DailyMenuItem> items = itemRepository.findByDailyMenuId(dailyMenu.getId());
-            return buildDailyMenuResponse(dailyMenu, items);
-        });
-    }
-
-    @Override
-    public DailyMenuResponse toggleActive(Long id) {
-        DailyMenu dailyMenu = getDailyMenu(id);
-        Long restaurantId = getCurrentRestaurantId();
-
-        // If activating, deactivate all other menus
-        if (!dailyMenu.getActive()) {
-            deactivateAllMenus(restaurantId);
+        // 1. Check for specific override first
+        Optional<DailyMenu> override = dailyMenuRepository.findByRestaurantIdAndMenuDate(restaurantId, date);
+        if (override.isPresent() && override.get().getIsOverride()) {
+            DailyMenu dailyMenu = override.get();
+            log.debug("Found override menu for date {}", date);
+            return buildDailyMenuResponse(dailyMenu);
         }
 
-        dailyMenu.setActive(!dailyMenu.getActive());
+        // 2. Check recurring configuration for day of week
+        int dayOfWeekValue = date.getDayOfWeek().getValue(); // 1=Monday, 7=Sunday
+        Optional<RecurringMenuConfig> recurringConfig = recurringMenuConfigRepository
+                .findByRestaurantIdAndDayOfWeekWithTemplate(restaurantId, dayOfWeekValue);
 
-        List<DailyMenuItem> items = itemRepository.findByDailyMenuId(id);
-        return buildDailyMenuResponse(dailyMenu, items);
+        if (recurringConfig.isEmpty()) {
+            throw new ResourceNotFoundException(DAILY_MENU_DATE_NOT_FOUND.formatted(date));
+        }
+
+        // Build response from recurring configuration (virtual menu)
+        log.debug("Using recurring configuration for date {}", date);
+        return buildVirtualMenuFromRecurring(date, recurringConfig.get());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public DailyMenuResponse getActiveMenu() {
+    public Page<DailyMenuResponse> findAllOverrides(Pageable pageable) {
         Long restaurantId = getCurrentRestaurantId();
-        DailyMenu dailyMenu = dailyMenuRepository.findByRestaurantIdAndActiveTrue(restaurantId)
-                .orElseThrow(() -> new ResourceNotFoundException(NO_ACTIVE_MENU));
+        Page<DailyMenu> overrides = dailyMenuRepository.findOverridesOrderedByNearestDate(restaurantId, pageable);
 
-        List<DailyMenuItem> items = itemRepository.findByDailyMenuId(dailyMenu.getId());
-        return buildDailyMenuResponse(dailyMenu, items);
+        return overrides.map(this::buildDailyMenuResponse);
     }
 
-    private void deactivateAllMenus(Long restaurantId) {
-        dailyMenuRepository.findByRestaurantIdAndActiveTrue(restaurantId)
-                .ifPresent(activeMenu -> activeMenu.setActive(false));
+    @Override
+    @Transactional(readOnly = true)
+    public List<DailyMenuResponse> getMonthlyView(Integer year, Integer month) {
+        Long restaurantId = getCurrentRestaurantId();
+        YearMonth yearMonth = YearMonth.of(year, month);
+        LocalDate startDate = yearMonth.atDay(1);
+        LocalDate endDate = yearMonth.atEndOfMonth();
+
+        List<DailyMenuResponse> monthlyMenus = new ArrayList<>();
+
+        // Get all overrides for this month
+        List<DailyMenu> overrides = dailyMenuRepository
+                .findByRestaurantIdAndMenuDateBetween(restaurantId, startDate, endDate);
+
+        // Get all recurring configurations
+        List<RecurringMenuConfig> recurringConfigs = recurringMenuConfigRepository
+                .findAllByRestaurantIdWithTemplate(restaurantId);
+
+        // Process each day of the month
+        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+            LocalDate currentDate = date; // For lambda
+
+            // Check if there's an override
+            Optional<DailyMenu> override = overrides.stream()
+                    .filter(m -> m.getMenuDate().equals(currentDate))
+                    .findFirst();
+
+            if (override.isPresent()) {
+                monthlyMenus.add(buildDailyMenuResponse(override.get()));
+            } else {
+                // Check recurring configuration
+                int dayOfWeekValue = date.getDayOfWeek().getValue();
+                Optional<RecurringMenuConfig> recurring = recurringConfigs.stream()
+                        .filter(c -> c.getDayOfWeek().equals(dayOfWeekValue))
+                        .findFirst();
+
+                recurring.ifPresent(config -> 
+                        monthlyMenus.add(buildVirtualMenuFromRecurring(currentDate, config)));
+            }
+        }
+
+        log.info("Generated monthly view for {}-{}: {} days with menus", year, month, monthlyMenus.size());
+        return monthlyMenus;
     }
 
-    private DailyMenuResponse buildDailyMenuResponse(DailyMenu dailyMenu, List<DailyMenuItem> items) {
-        List<MenuItemResponse> itemResponses = items.stream()
-                .map(item -> {
-                    Product product = item.getProduct();
-                    BigDecimal effectivePrice = item.getPriceOverride() != null ? 
-                            item.getPriceOverride() : product.getPrice();
-                    
-                    // Get product name from master_product
-                    String productName = product.getMasterProduct() != null ? 
-                            product.getMasterProduct().getName() : UNKNOWN_PRODUCT;
-                    
-                    return new MenuItemResponse(
-                            item.getId(),
-                            product.getId(),
-                            productName,
-                            product.getPrice(),
-                            null, // No section ID in simplified schema
-                            null, // No section name in simplified schema
-                            item.getPriceOverride(),
-                            effectivePrice
-                    );
-                })
-                .collect(Collectors.toList());
+    private List<MenuItemResponse> resolveMenuItems(Long restaurantId, MasterMenuTemplate template) {
+        List<MasterMenuTemplateItem> templateItems = template.getItems();
+        if (templateItems == null || templateItems.isEmpty()) {
+            return List.of();
+        }
 
-        DailyMenuResponse response = dailyMenuMapper.toResponse(dailyMenu);
+        List<MenuItemResponse> items = new ArrayList<>();
+        for (MasterMenuTemplateItem templateItem : templateItems) {
+            MasterProduct masterProduct = templateItem.getMasterProduct();
+            Optional<Product> product = productRepository.findByRestaurantIdAndMasterProductId(
+                    restaurantId, masterProduct.getId());
+
+            if (product.isPresent()) {
+                Product restaurantProduct = product.get();
+                items.add(new MenuItemResponse(
+                        templateItem.getId(),
+                        restaurantProduct.getId(),
+                        masterProduct.getName(),
+                        restaurantProduct.getPrice(),
+                        templateItem.getSection() != null ? templateItem.getSection().getId() : null,
+                        templateItem.getSection() != null ? templateItem.getSection().getName() : null
+                ));
+            } else {
+                log.warn("Product not found for master product {} in restaurant {}",
+                        masterProduct.getId(), restaurantId);
+            }
+        }
+
+        return items;
+    }
+
+    private DailyMenuResponse buildVirtualMenuFromRecurring(LocalDate date, RecurringMenuConfig config) {
+        MasterMenuTemplate template = config.getMasterTemplate();
+        Long restaurantId = config.getRestaurant().getId();
+
         return new DailyMenuResponse(
-                response.id(),
-                response.restaurantId(),
-                response.menuDate(),
-                response.templateId(),
-                response.templateName(),
-                response.active(),
-                itemResponses
+                null, // No ID (virtual)
+                restaurantId,
+                date,
+                template.getId(),
+                template.getName(),
+                false, // isOverride
+                resolveMenuItems(restaurantId, template)
         );
     }
 
-    private DailyMenu getDailyMenu(Long id) {
-        return dailyMenuRepository.findById(id)
+    private DailyMenuResponse buildDailyMenuResponse(DailyMenu dailyMenu) {
+        MasterMenuTemplate template = dailyMenu.getMasterTemplate();
+        Long restaurantId = dailyMenu.getRestaurant().getId();
+
+        return new DailyMenuResponse(
+                dailyMenu.getId(),
+                restaurantId,
+                dailyMenu.getMenuDate(),
+                template != null ? template.getId() : null,
+                template != null ? template.getName() : null,
+                dailyMenu.getIsOverride(),
+                template != null ? resolveMenuItems(restaurantId, template) : List.of()
+        );
+    }
+
+    private DailyMenu getDailyMenu(Long id, Long restaurantId) {
+        return dailyMenuRepository.findByIdAndRestaurantId(id, restaurantId)
                 .orElseThrow(() -> new ResourceNotFoundException(DAILY_MENU_NOT_FOUND.formatted(id)));
     }
 
     private MasterMenuTemplate getMasterTemplate(Long id) {
-        return masterTemplateRepository.findById(id)
+        Long organizationId = securityContextHelper.getOrganizationId();
+        return masterTemplateRepository.findByIdAndOrganizationId(id, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException(TEMPLATE_NOT_FOUND.formatted(id)));
     }
 

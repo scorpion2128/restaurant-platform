@@ -15,7 +15,7 @@ public record DailyMenuResponse(
 
         String templateName,
 
-        Boolean active,
+        Boolean isOverride,
 
         List<MenuItemResponse> items
 

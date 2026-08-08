@@ -18,6 +18,8 @@ public record AddMasterTemplateItemsRequest(
             @NotNull(message = "Master product ID is required")
             Long masterProductId,
             
+            Long sectionId,
+            
             Integer displayOrder
     ) {
     }

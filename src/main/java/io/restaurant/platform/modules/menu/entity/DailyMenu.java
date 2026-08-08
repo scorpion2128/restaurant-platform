@@ -34,6 +34,6 @@ public class DailyMenu extends BaseEntity {
     @JoinColumn(name = "master_template_id")
     private MasterMenuTemplate masterTemplate;
 
-    @Column(nullable = false)
-    private Boolean active = false;
+    @Column(name = "is_override", nullable = false)
+    private Boolean isOverride = false;
 }

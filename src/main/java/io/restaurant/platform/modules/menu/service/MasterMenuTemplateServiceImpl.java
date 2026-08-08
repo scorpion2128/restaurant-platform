@@ -5,9 +5,11 @@ import io.restaurant.platform.modules.menu.dto.request.AddMasterTemplateItemsReq
 import io.restaurant.platform.modules.menu.dto.request.CreateMasterTemplateRequest;
 import io.restaurant.platform.modules.menu.dto.request.UpdateMasterTemplateRequest;
 import io.restaurant.platform.modules.menu.dto.response.MasterTemplateResponse;
+import io.restaurant.platform.modules.menu.entity.MasterMenuSection;
 import io.restaurant.platform.modules.menu.entity.MasterMenuTemplate;
 import io.restaurant.platform.modules.menu.entity.MasterMenuTemplateItem;
 import io.restaurant.platform.modules.menu.mapper.MasterMenuTemplateMapper;
+import io.restaurant.platform.modules.menu.repository.MasterMenuSectionRepository;
 import io.restaurant.platform.modules.menu.repository.MasterMenuTemplateItemRepository;
 import io.restaurant.platform.modules.menu.repository.MasterMenuTemplateRepository;
 import io.restaurant.platform.modules.organization.entity.Organization;
@@ -36,6 +38,7 @@ public class MasterMenuTemplateServiceImpl implements MasterMenuTemplateService 
 
     private static final String TEMPLATE_NOT_FOUND = "Master template with id %d not found.";
     private static final String ITEM_NOT_FOUND = "Template item with id %d not found.";
+    private static final String SECTION_NOT_FOUND = "Menu section with id %d not found.";
     private static final String ORGANIZATION_NOT_FOUND = "Organization with id %d not found.";
     private static final String PRODUCT_NOT_FOUND = "Master product with id %d not found.";
     private static final String TEMPLATE_NAME_EXISTS = "Master template with name '%s' already exists.";
@@ -44,6 +47,7 @@ public class MasterMenuTemplateServiceImpl implements MasterMenuTemplateService 
     private final SecurityContextHelper securityContextHelper;
     private final MasterMenuTemplateRepository templateRepository;
     private final MasterMenuTemplateItemRepository itemRepository;
+    private final MasterMenuSectionRepository sectionRepository;
     private final MasterProductRepository productRepository;
     private final OrganizationRepository organizationRepository;
     private final MasterMenuTemplateMapper templateMapper;
@@ -100,7 +104,7 @@ public class MasterMenuTemplateServiceImpl implements MasterMenuTemplateService 
     @Override
     @Transactional(readOnly = true)
     public MasterTemplateResponse findById(Long id) {
-        MasterMenuTemplate template = getTemplate(id);
+        MasterMenuTemplate template = getTemplateWithItems(id);
         return templateMapper.toResponse(template);
     }
 
@@ -109,6 +113,23 @@ public class MasterMenuTemplateServiceImpl implements MasterMenuTemplateService 
     public Page<MasterTemplateResponse> findAllByOrganization(Pageable pageable) {
         Long organizationId = getCurrentOrganizationId();
         Page<MasterMenuTemplate> templates = templateRepository.findAll(pageable);
+        
+        // Load items for all templates
+        if (!templates.isEmpty()) {
+            List<Long> templateIds = templates.getContent().stream()
+                    .map(MasterMenuTemplate::getId)
+                    .toList();
+            List<MasterMenuTemplate> templatesWithItems = templateRepository.findAllByIdInWithItems(templateIds);
+            
+            // Replace templates with their items-loaded versions
+            return templates.map(template -> {
+                MasterMenuTemplate withItems = templatesWithItems.stream()
+                        .filter(t -> t.getId().equals(template.getId()))
+                        .findFirst()
+                        .orElse(template);
+                return templateMapper.toResponse(withItems);
+            });
+        }
         
         return templates.map(templateMapper::toResponse);
     }
@@ -129,21 +150,75 @@ public class MasterMenuTemplateServiceImpl implements MasterMenuTemplateService 
     public MasterTemplateResponse addItems(Long templateId, AddMasterTemplateItemsRequest request) {
         MasterMenuTemplate template = getTemplate(templateId);
 
-        List<MasterMenuTemplateItem> items = new ArrayList<>();
+        // Get existing items
+        List<MasterMenuTemplateItem> existingItems = itemRepository.findByMasterTemplateId(templateId);
+        
+        // Create a map of existing items: key = (productId, sectionId)
+        var existingItemsMap = existingItems.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        item -> {
+                            Long sectionId = item.getSection() != null ? item.getSection().getId() : null;
+                            return new java.util.AbstractMap.SimpleEntry<>(item.getMasterProduct().getId(), sectionId);
+                        },
+                        item -> item
+                ));
+        
+        // Process new items
+        var newItemsKeys = new java.util.HashSet<java.util.Map.Entry<Long, Long>>();
+        var itemsToSave = new ArrayList<MasterMenuTemplateItem>();
+        
         for (AddMasterTemplateItemsRequest.MasterTemplateItemRequest itemRequest : request.items()) {
             MasterProduct product = getProduct(itemRequest.masterProductId());
-
-            MasterMenuTemplateItem item = new MasterMenuTemplateItem();
-            item.setMasterTemplate(template);
-            item.setMasterProduct(product);
-            item.setDisplayOrder(itemRequest.displayOrder() != null ? itemRequest.displayOrder() : 0);
-            items.add(item);
+            Long sectionId = itemRequest.sectionId();
+            var key = new java.util.AbstractMap.SimpleEntry<>(itemRequest.masterProductId(), sectionId);
+            newItemsKeys.add(key);
+            
+            // Check if item already exists
+            MasterMenuTemplateItem existingItem = existingItemsMap.get(key);
+            
+            if (existingItem != null) {
+                // Update existing item (only displayOrder might change)
+                existingItem.setDisplayOrder(itemRequest.displayOrder() != null ? itemRequest.displayOrder() : 0);
+                itemsToSave.add(existingItem);
+            } else {
+                // Create new item
+                MasterMenuTemplateItem newItem = new MasterMenuTemplateItem();
+                newItem.setMasterTemplate(template);
+                newItem.setMasterProduct(product);
+                newItem.setDisplayOrder(itemRequest.displayOrder() != null ? itemRequest.displayOrder() : 0);
+                
+                // Set section if provided
+                if (sectionId != null) {
+                    MasterMenuSection section = getSection(sectionId);
+                    // Verify section belongs to the same template
+                    if (!section.getMasterTemplate().getId().equals(templateId)) {
+                        throw new BusinessException("Section does not belong to this template");
+                    }
+                    newItem.setSection(section);
+                }
+                
+                itemsToSave.add(newItem);
+            }
+        }
+        
+        // Find items to delete (exist in DB but not in new request)
+        var itemsToDelete = existingItemsMap.entrySet().stream()
+                .filter(entry -> !newItemsKeys.contains(entry.getKey()))
+                .map(java.util.Map.Entry::getValue)
+                .toList();
+        
+        // Delete items that are no longer needed
+        if (!itemsToDelete.isEmpty()) {
+            itemRepository.deleteAll(itemsToDelete);
+        }
+        
+        // Save new and updated items
+        if (!itemsToSave.isEmpty()) {
+            itemRepository.saveAll(itemsToSave);
         }
 
-        itemRepository.saveAll(items);
-
         // Refresh template to get updated items
-        template = getTemplate(templateId);
+        template = getTemplateWithItems(templateId);
         return templateMapper.toResponse(template);
     }
 
@@ -165,9 +240,19 @@ public class MasterMenuTemplateServiceImpl implements MasterMenuTemplateService 
                 .orElseThrow(() -> new ResourceNotFoundException(TEMPLATE_NOT_FOUND.formatted(id)));
     }
 
+    private MasterMenuTemplate getTemplateWithItems(Long id) {
+        return templateRepository.findByIdWithItems(id)
+                .orElseThrow(() -> new ResourceNotFoundException(TEMPLATE_NOT_FOUND.formatted(id)));
+    }
+
     private MasterProduct getProduct(Long id) {
         return productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(PRODUCT_NOT_FOUND.formatted(id)));
+    }
+
+    private MasterMenuSection getSection(Long id) {
+        return sectionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(SECTION_NOT_FOUND.formatted(id)));
     }
 
     private Organization getOrganization(Long id) {

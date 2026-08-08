@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Product Repository - Simplified for master catalog
@@ -18,6 +19,8 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     Page<Product> findByRestaurantId(Long restaurantId, Pageable pageable);
 
     boolean existsByRestaurantIdAndMasterProductId(Long restaurantId, Long masterProductId);
+
+    Optional<Product> findByRestaurantIdAndMasterProductId(Long restaurantId, Long masterProductId);
 
     @Query("SELECT p FROM Product p " +
            "WHERE p.restaurant.id = :restaurantId " +

@@ -3,54 +3,43 @@ package io.restaurant.platform.modules.product.mapper;
 import io.restaurant.platform.modules.product.dto.request.CreateProductRequest;
 import io.restaurant.platform.modules.product.dto.request.UpdateProductRequest;
 import io.restaurant.platform.modules.product.dto.response.ProductResponse;
-import io.restaurant.platform.modules.product.entity.Product;
+import io.restaurant.platform.modules.product.entity.MasterProduct;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
 
 /**
- * Product Mapper - Simplified for master catalog
- * Product entity only contains price and availability
- * Name, description, and category come from master_product
+ * Product Mapper - Working directly with master_product
+ * This mapper is kept for potential future use but not currently used by ProductService
  */
 @Mapper(componentModel = "spring")
 public interface ProductMapper {
 
-    @Mapping(target = "restaurant", ignore = true)
-    @Mapping(target = "masterProduct", ignore = true)
-    Product toEntity(CreateProductRequest request);
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "organization", ignore = true)
+    @Mapping(target = "masterCategory", ignore = true)
+    @Mapping(target = "products", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "createdBy", ignore = true)
+    @Mapping(target = "updatedBy", ignore = true)
+    @Mapping(target = "basePrice", source = "price")
+    MasterProduct toEntity(CreateProductRequest request);
 
-    @Mapping(target = "restaurantId", source = "restaurant.id")
-    @Mapping(target = "masterId", source = "masterProduct.id")
-    @Mapping(target = "name", expression = "java(getMasterProductName(product))")
-    @Mapping(target = "description", expression = "java(getMasterProductDescription(product))")
-    @Mapping(target = "categoryId", expression = "java(getCategoryId(product))")
-    @Mapping(target = "categoryName", expression = "java(getCategoryName(product))")
-    ProductResponse toResponse(Product product);
+    @Mapping(target = "organizationId", source = "organization.id")
+    @Mapping(target = "price", source = "basePrice")
+    @Mapping(target = "categoryId", source = "masterCategory.id")
+    @Mapping(target = "categoryName", source = "masterCategory.name")
+    ProductResponse toResponse(MasterProduct product);
 
-    @Mapping(target = "restaurant", ignore = true)
-    @Mapping(target = "masterProduct", ignore = true)
-    void updateEntity(UpdateProductRequest request, @MappingTarget Product product);
-
-    default String getMasterProductName(Product product) {
-        return product.getMasterProduct() != null ? 
-                product.getMasterProduct().getName() : null;
-    }
-
-    default String getMasterProductDescription(Product product) {
-        return product.getMasterProduct() != null ? 
-                product.getMasterProduct().getDescription() : null;
-    }
-
-    default Long getCategoryId(Product product) {
-        return product.getMasterProduct() != null && 
-               product.getMasterProduct().getMasterCategory() != null ?
-                product.getMasterProduct().getMasterCategory().getId() : null;
-    }
-
-    default String getCategoryName(Product product) {
-        return product.getMasterProduct() != null && 
-               product.getMasterProduct().getMasterCategory() != null ?
-                product.getMasterProduct().getMasterCategory().getName() : null;
-    }
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "organization", ignore = true)
+    @Mapping(target = "masterCategory", ignore = true)
+    @Mapping(target = "products", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "createdBy", ignore = true)
+    @Mapping(target = "updatedBy", ignore = true)
+    @Mapping(target = "basePrice", source = "price")
+    void updateEntity(UpdateProductRequest request, @MappingTarget MasterProduct product);
 }

@@ -1,5 +1,6 @@
 package io.restaurant.platform.modules.menu.dto.response;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -24,7 +25,10 @@ public record MasterTemplateResponse(
             Long id,
             Long masterProductId,
             String productName,
+            BigDecimal productPrice,
             String categoryName,
+            Long sectionId,
+            String sectionName,
             Integer displayOrder
     ) {
     }

@@ -2,9 +2,13 @@ package io.restaurant.platform.modules.menu.controller;
 
 import io.restaurant.platform.modules.menu.dto.request.AddMasterTemplateItemsRequest;
 import io.restaurant.platform.modules.menu.dto.request.CreateMasterTemplateRequest;
+import io.restaurant.platform.modules.menu.dto.request.CreateMenuSectionRequest;
 import io.restaurant.platform.modules.menu.dto.request.UpdateMasterTemplateRequest;
+import io.restaurant.platform.modules.menu.dto.request.UpdateMenuSectionRequest;
 import io.restaurant.platform.modules.menu.dto.response.MasterTemplateResponse;
+import io.restaurant.platform.modules.menu.dto.response.MenuSectionResponse;
 import io.restaurant.platform.modules.menu.service.MasterMenuTemplateService;
+import io.restaurant.platform.modules.menu.service.MenuSectionService;
 import io.restaurant.platform.shared.api.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +28,7 @@ import java.util.List;
 public class MasterMenuTemplateController {
 
     private final MasterMenuTemplateService templateService;
+    private final MenuSectionService sectionService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN')")
@@ -38,7 +43,7 @@ public class MasterMenuTemplateController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN')")
     public ResponseEntity<ApiResponse<MasterTemplateResponse>> update(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @Valid @RequestBody UpdateMasterTemplateRequest request) {
         MasterTemplateResponse response = templateService.update(id, request);
         return ResponseEntity.ok(ApiResponse.success("Master template updated successfully", response));
@@ -46,13 +51,13 @@ public class MasterMenuTemplateController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN')")
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable("id") Long id) {
         templateService.delete(id);
         return ResponseEntity.ok(ApiResponse.success("Master template deleted successfully", null));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<MasterTemplateResponse>> findById(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<MasterTemplateResponse>> findById(@PathVariable("id") Long id) {
         MasterTemplateResponse response = templateService.findById(id);
         return ResponseEntity.ok(ApiResponse.success("Master template retrieved successfully", response));
     }
@@ -73,7 +78,7 @@ public class MasterMenuTemplateController {
     @PostMapping("/{id}/items")
     @PreAuthorize("hasAnyRole('ADMIN')")
     public ResponseEntity<ApiResponse<MasterTemplateResponse>> addItems(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @Valid @RequestBody AddMasterTemplateItemsRequest request) {
         MasterTemplateResponse response = templateService.addItems(id, request);
         return ResponseEntity.ok(ApiResponse.success("Items added successfully", response));
@@ -82,9 +87,58 @@ public class MasterMenuTemplateController {
     @DeleteMapping("/{templateId}/items/{itemId}")
     @PreAuthorize("hasAnyRole('ADMIN')")
     public ResponseEntity<ApiResponse<Void>> removeItem(
-            @PathVariable Long templateId,
-            @PathVariable Long itemId) {
+            @PathVariable("templateId") Long templateId,
+            @PathVariable("itemId") Long itemId) {
         templateService.removeItem(templateId, itemId);
         return ResponseEntity.ok(ApiResponse.success("Item removed successfully", null));
+    }
+
+    // ============================================
+    // SECTION ENDPOINTS
+    // ============================================
+
+    @PostMapping("/{templateId}/sections")
+    @PreAuthorize("hasAnyRole('ADMIN')")
+    public ResponseEntity<ApiResponse<MenuSectionResponse>> createSection(
+            @PathVariable("templateId") Long templateId,
+            @Valid @RequestBody CreateMenuSectionRequest request) {
+        MenuSectionResponse response = sectionService.create(templateId, request);
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Section created successfully", response));
+    }
+
+    @PutMapping("/{templateId}/sections/{sectionId}")
+    @PreAuthorize("hasAnyRole('ADMIN')")
+    public ResponseEntity<ApiResponse<MenuSectionResponse>> updateSection(
+            @PathVariable("templateId") Long templateId,
+            @PathVariable("sectionId") Long sectionId,
+            @Valid @RequestBody UpdateMenuSectionRequest request) {
+        MenuSectionResponse response = sectionService.update(templateId, sectionId, request);
+        return ResponseEntity.ok(ApiResponse.success("Section updated successfully", response));
+    }
+
+    @DeleteMapping("/{templateId}/sections/{sectionId}")
+    @PreAuthorize("hasAnyRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> deleteSection(
+            @PathVariable("templateId") Long templateId,
+            @PathVariable("sectionId") Long sectionId) {
+        sectionService.delete(templateId, sectionId);
+        return ResponseEntity.ok(ApiResponse.success("Section deleted successfully", null));
+    }
+
+    @GetMapping("/{templateId}/sections/{sectionId}")
+    public ResponseEntity<ApiResponse<MenuSectionResponse>> getSectionById(
+            @PathVariable("templateId") Long templateId,
+            @PathVariable("sectionId") Long sectionId) {
+        MenuSectionResponse response = sectionService.findById(templateId, sectionId);
+        return ResponseEntity.ok(ApiResponse.success("Section retrieved successfully", response));
+    }
+
+    @GetMapping("/{templateId}/sections")
+    public ResponseEntity<ApiResponse<List<MenuSectionResponse>>> listSections(
+            @PathVariable("templateId") Long templateId) {
+        List<MenuSectionResponse> response = sectionService.findAllByTemplate(templateId);
+        return ResponseEntity.ok(ApiResponse.success("Sections retrieved successfully", response));
     }
 }

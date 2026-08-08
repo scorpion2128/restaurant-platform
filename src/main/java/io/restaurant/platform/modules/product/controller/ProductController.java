@@ -103,7 +103,7 @@ public class ProductController {
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Page<ProductResponse>>> listProducts(
-            @PageableDefault(size = 20, sort = "id") Pageable pageable,
+            @PageableDefault(size = 20, sort = "name") Pageable pageable,
             @RequestParam(name = "categoryId", required = false) Long categoryId,
             @RequestParam(name = "available", required = false) Boolean available) {
         Page<ProductResponse> products = productService.findAllByRestaurant(pageable, categoryId, available);
